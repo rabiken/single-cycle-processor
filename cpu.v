@@ -183,9 +183,9 @@ module DataPath ( input        clk, reset,
     Adder32 adder_pc_plus_4( .a(PC), .b(instr_size), .y(pc_plus_4) );
 
     // GPR Set
-    reg [31:0] res; // The result to writeback to GPR
+    wire [31:0] res; // The result to writeback to GPR
     wire [31:0] rs1, rs2;   // The values read from GPR
-    wire a1, a2, a3; // The addresses inputs for GPR
+    wire [4:0] a1, a2, a3; // The addresses inputs for GPR
     assign a1 = instruction[19:15];
     assign a2 = instruction[24:20];
     assign a3 = instruction[11:7];
@@ -198,7 +198,7 @@ module DataPath ( input        clk, reset,
     assign imm_instr = instruction[31:7];
     wire [31:0] imm_op; // The immediate operand
     ImmDecoder imm_decoder_inst ( 
-        .instr(imm_instrs), .imm_ctrl(ctrlImmCtrl), 
+        .instr(imm_instr), .imm_ctrl(ctrlImmCtrl), 
         .imm_out(imm_op) );
     
     // Adder PC + Imm
@@ -325,8 +325,8 @@ module GPRSet( input  [4:0] a1, a2, a3,
              );
     reg [31:0] gpr_arr[31:0];
     // Initialize GPRs
+    integer i;
     initial begin
-        integer i;
         for (i=0; i<32; i=i+1) begin
             gpr_arr[i] = 32'h00000000;
         end
