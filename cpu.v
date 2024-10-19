@@ -8,6 +8,46 @@ module processor( input         clk, reset,
                   input  [31:0] data_from_mem
                 );
     //... write your code here ...
+    wire [6:0] opcode = instruction[6:0];
+    wire [2:0] funct3 = instruction[14:12];
+    wire [6:0] funct7 = instruction[31:25];
+    wire [2:0] ctrlImmCtrl, ctrlALUCtrl;
+    wire ctrlRegWrite, ctrlALUSrc, 
+        ctrlBranchJal, ctrlBranchJalr, 
+        ctrlBranchBeq, ctrlBranchBlt, 
+        ctrlMemToReg;
+    ControlUnit control_unit_inst( 
+        .opcode(opcode),
+        .funct3(funct3),
+        .funct7(funct7),
+        .ctrlRegWrite(ctrlRegWrite),
+        .ctrlImmCtrl(ctrlImmCtrl), 
+        .ctrlALUSrc(ctrlALUSrc),
+        .ctrlALUCtrl(ctrlALUCtrl), 
+        .ctrlBranchJal(ctrlBranchJal),
+        .ctrlBranchJalr(ctrlBranchJalr), 
+        .ctrlBranchBeq(ctrlBranchBeq),
+        .ctrlBranchBlt(ctrlBranchBlt), 
+        .ctrlMemToReg(ctrlMemToReg),
+        .ctrlMemWrite(WE) 
+    );
+    DataPath data_path_inst( .clk(clk),
+        .reset(reset),
+        .PC(PC),
+        .instruction(instruction),
+        .address_to_mem(address_to_mem),
+        .data_to_mem(data_to_mem),
+        .data_from_mem(data_from_mem),
+        .ctrlRegWrite(ctrlRegWrite),
+        .ctrlImmCtrl(ctrlImmCtrl), 
+        .ctrlALUSrc(ctrlALUSrc),
+        .ctrlALUCtrl(ctrlALUCtrl), 
+        .ctrlBranchJal(ctrlBranchJal),
+        .ctrlBranchJalr(ctrlBranchJalr), 
+        .ctrlBranchBeq(ctrlBranchBeq),
+        .ctrlBranchBlt(ctrlBranchBlt), 
+        .ctrlMemToReg(ctrlMemToReg) 
+    );
 endmodule
 
 // Conntrol Unit
