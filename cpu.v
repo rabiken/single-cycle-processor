@@ -11,7 +11,109 @@ module processor( input         clk, reset,
 endmodule
 
 // Conntrol Unit
-module ControlUnit ();
+module ControlUnit (
+    input [6:0] opcode,
+    input [2:0] funct3,
+    input [6:0] funct7,
+    output reg ctrlRegWrite,
+    output reg [2:0] ctrlImmCtrl,
+    output reg ctrlALUSrc,
+    output reg [2:0] ctrlALUCtrl,
+    output reg ctrlBranchJal,
+    output reg ctrlBranchJalr,
+    output reg ctrlBranchBeq,
+    output reg ctrlBranchBlt,
+    output reg ctrlMemToReg,
+    output reg ctrlMemWrite
+);
+    always @(*) begin
+        // Initialize all control signals
+        ctrlRegWrite = 1'b0;
+        ctrlImmCtrl = 3'bxxx;
+        ctrlALUSrc = 1'b0;
+        ctrlALUCtrl = 3'bxxx;
+        ctrlBranchJal = 1'b0;
+        ctrlBranchJalr = 1'b0;
+        ctrlBranchBeq = 1'b0;
+        ctrlBranchBlt = 1'b0;
+        ctrlMemToReg = 1'b0;
+        ctrlMemWrite = 1'b0;
+        case (opcode)
+            // R-type
+            7'b0110011: begin
+                ctrlRegWrite = 1'b1;
+                ctrlALUSrc = 1'b0;
+                case (funct3)
+                    3'b000: ctrlALUCtrl = 3'b000; // Add
+                    3'b010: ctrlALUCtrl = 3'b001; // Sub
+                    3'b101: ctrlALUCtrl = 3'b010; // Srl
+                    3'b111: ctrlALUCtrl = 3'b011; // And
+                    default: ctrlALUCtrl = 3'bxxx;
+                endcase
+            end
+            // I-type
+            // lw
+            7'b0000011: begin
+                ctrlRegWrite = 1'b1;
+                ctrlImmCtrl = 3'b000; // I-type
+                ctrlALUSrc = 1'b1;
+                ctrlMemToReg = 1'b1;
+            end 
+            // addi
+            7'b0010011: begin
+                ctrlRegWrite = 1'b1;
+                ctrlImmCtrl = 3'b000; // I-type
+                ctrlALUSrc = 1'b1;
+                ctrlALUCtrl = 3'b000; // Add
+                ctrlMemToReg = 1'b1;
+            end
+            // jalr
+            7'b1100111: begin
+                ctrlRegWrite = 1'b1;
+                ctrlImmCtrl = 3'b000; // I-type
+                ctrlALUSrc = 1'b1;
+                ctrlALUCtrl = 3'b000; // Add
+                ctrlBranchJalr = 1'b1;
+            end
+            // S-type
+            // sw
+            7'b0100011: begin
+                ctrlImmCtrl = 3'b001; // S-type
+                ctrlALUSrc = 1'b1;
+                ctrlMemWrite = 1'b1;
+            end
+
+            // B-type
+            // beq, blt
+            7'b1100011: begin
+                ctrlImmCtrl = 3'b010; // B-type
+                ctrlALUSrc = 1'b0;
+                ctrlALUCtrl = 3'b001; // Sub
+                case (funct3)
+                    3'b000: ctrlBranchBeq = 1'b1;
+                    3'b100: ctrlBranchBlt = 1'b1;
+                endcase
+            end
+
+            // J-type
+            // jal
+            7'b1101111: begin
+                ctrlRegWrite = 1'b1;
+                ctrlImmCtrl = 3'b011; // J-type
+                ctrlBranchJal = 1'b1;
+            end
+
+            // Others
+            // floor_log
+            7'b0001011: begin
+                ctrlRegWrite = 1'b1;
+                ctrlALUSrc = 1'b1;
+                ctrlALUCtrl = 3'b100; // Fll
+                ctrlMemToReg = 1'b0;
+            end
+
+        endcase
+    end
 endmodule
 
 // Data Path
@@ -29,7 +131,7 @@ module DataPath ( input        clk, reset,
                   input ctrlBranchJalr,
                   input ctrlBranchBeq,
                   input ctrlBranchBlt,
-                  input ctrlMemToReg,
+                  input ctrlMemToReg
                 );
     // Program Counter Register
     wire [31:0] pc_next;
@@ -155,17 +257,17 @@ module ALU( input  [31:0] a,
 
             // Add - Addition
             3'b000: y = a + b;
-            // And - Bitwise AND
-            3'b001: y = a & b;
             // Sub - Subtract
-            3'b010: begin
+            3'b001: begin
                 y = a - b;
                 if (a==b) cmp = 2'b00;
                 else if (a<b) cmp = 2'b01;
                 else cmp = 2'b10;
             end
             // Srl - Shift Right Logical
-            3'b011: y = a >> b;
+            3'b010: y = a >> b;
+            // And - Bitwise AND
+            3'b011: y = a & b;
             // Fll - Floor Log2
             3'b100: begin
                 // TODO: Implement Fll
@@ -216,7 +318,7 @@ module ImmDecoder( input  [24:0] instr,
             3'b011: imm_out <= { instr[24:5], 12'b0 };
             // J-type
             3'b100: imm_out <= { {12{instr[24]}}, instr[12:5], instr[13], instr[23:14], 1'b0 };
-            default: imm_out <= 32'bx;
+            default: imm_out <= 32'dx;
         endcase
     end
 endmodule
