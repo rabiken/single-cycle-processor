@@ -1,0 +1,31 @@
+add:	0000000	rs2	rs1	000	rd	0110011
+addi	imm[11:0]	rs1	000	rd	0010011
+and:	0000000	rs2	rs1	111	rd	0110011
+sub:	0100000	rs2	rs1	000	rd	0110011
+srl:	0000000	rs2	rs1	101	rd	0110011
+beq:	imm[12|10:5]	rs2	rs1	000	imm[4:1|11]	1100011
+blt:	imm[12|10:5]	rs2	rs1	100	imm[4:1|11]	1100011
+lw:	imm[11:0]	rs1	010	rd	0000011
+sw:	imm[11:5]	rs2	rs1	010	imm[4:0]	0100011
+lui:	imm[31:12]	rd	0110111
+jal:	imm[20|10:1|11|19:12]	rd	1101111
+jalr:	imm[11:0]	rs1	000	rd	1100111
+floor_log:	000000000000	rs1	000	rd	0001011
+
+
+// Description
+add	add rd, rs1, rs2	rd ← [rs1] + [rs2];	
+addi	addi rd, rs1, imm11:0	rd ← [rs1] + imm11:0;	
+and	and rd, rs1, rs2	rd ← [rs1] & [rs2];	
+sub	sub rd, rs1, rs2	rd ← [rs1] - [rs2];	
+srl	srl rd, rs1, rs2	rd ← (unsigned)[rs1] >> [rs2];	
+beq	beq rs1, rs2, imm12:1	if [rs1] == [rs2] go to [PC]+{imm12:1,'0'}; else go to [PC]+4;	
+blt	blt rs1, rs2, imm12:1	if [rs1] < [rs2] go to [PC]+{imm12:1,'0'}; else go to [PC]+4;	signed comparison
+lw	lw rd,imm11:0(rs1)	rd ← Memory[[rs1] + imm11:0]	
+sw	sw rs2,imm11:0(rs1)	Memory[[rs1] + imm11:0] ← [rs2];	
+lui	lui rd, imm31:12	rd ← {imm31:12,'0000 0000 0000'};	
+jal	jal rd, imm20:1	rd ← [PC]+4; go to [PC] +{imm20:1,'0'};	
+jalr	jalr rd, rs1, imm11:0	rd ← [PC]+4; go to [rs1]+imm11:0;
+
+floor_log	floor_log rd, rs1	rd ← (int)floor(log2(rs1));	
+The content of the rs1 register is interpreted as a non-zero positive 32-bit float in normalized form. The content of the rd register is interpreted as a two’s complement integer. floor() returns the nearest integer value below the specified number. log2() is a binary logarithm.
