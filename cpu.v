@@ -10,7 +10,118 @@ module processor( input         clk, reset,
     //... write your code here ...
 endmodule
 
+// Conntrol Unit
+module ControlUnit ();
+endmodule
+
+// Data Path
+module DataPath ( input        clk, reset,
+                  output [31:0] PC,
+                  input  [31:0] instruction,
+                  output [31:0] address_to_mem,
+                  output [31:0] data_to_mem,
+                  input  [31:0] data_from_mem,
+                  input ctrlRegWrite,
+                  input [2:0] ctrlImmCtrl,
+                  input ctrlALUSrc,
+                  input [2:0] ctrlALUCtrl,
+                  input ctrlBranchJal,
+                  input ctrlBranchJalr,
+                  input ctrlBranchBeq,
+                  input ctrlBranchBlt,
+                  input ctrlMemToReg,
+                );
+    // Program Counter Register
+    wire [31:0] pc_next;
+    DFF pc_reg( .clk(clk), .reset(reset), .d(pc_next), .q(PC) );
+
+    // Adder PC + 4
+    reg  [31:0] instr_size = 32'd4; // The size of an instruction in bytes (4 bytes)
+    wire [31:0] pc_plus_4; // The value of PC + 4    
+    Adder32 adder_pc_plus_4( .a(PC), .b(instr_size), .y(pc_plus_4) );
+
+    // GPR Set
+    reg [31:0] res; // The result to writeback to GPR
+    wire [31:0] rs1, rs2;   // The values read from GPR
+    wire a1, a2, a3; // The addresses inputs for GPR
+    assign a1 = instruction[19:15];
+    assign a2 = instruction[24:20];
+    assign a3 = instruction[11:7];
+    GPRSet gpr_set( .a1(a1), .a2(a2), .a3(a3), 
+                    .wd3(res), .clk(clk), .we(ctrlRegWrite), 
+                    .rd1(rs1), .rd2(rs2) );
+
+    // Immediate Decoder
+    wire [24:0] imm_instr; // The immediate instruction
+    assign imm_instr = instruction[31:7];
+    wire [31:0] imm_op; // The immediate operand
+    ImmDecoder imm_decoder_inst ( 
+        .instr(imm_instrs), .imm_ctrl(ctrlImmCtrl), 
+        .imm_out(imm_op) );
+    
+    // Adder PC + Imm
+    wire [31:0] pc_plus_imm; // The value of PC + immediate
+    Adder32 adder_pc_plus_imm( .a(PC), .b(imm_op), .y(pc_plus_imm) );
+
+    // Mux ALU Src
+    wire [31:0] alu_src; // The value of the selected ALU source
+    Mux2x1 mux_alu_src( .sel(ctrlALUSrc), .a(rs2), .b(imm_op), .y(alu_src) );
+
+    // ALU
+    wire [1:0] alu_cmp; // The comparison result
+    wire [31:0] alu_out; // The ALU output 
+    ALU alu_inst( .a(rs1), .b(alu_src), .alu_ctrl(ctrlALUCtrl), 
+        .y(alu_out), .cmp(alu_cmp) );
+
+    // Mux for Branch target
+    wire [31:0] branch_target; // The target address for branch
+    Mux2x1 mux_branch_target( .sel(ctrlBranchJalr), 
+        .a(pc_plus_imm), .b(alu_out), .y(branch_target) );
+    
+    // Combinational logic for the branching
+    reg branch_outcome; // The outcome of the branch
+    reg branch_jalx; // The register is 1 when the branch is jal or jalr
+    always @(*) begin
+        branch_jalx = ctrlBranchJal || ctrlBranchJalr;
+        if (ctrlBranchBeq) begin
+            branch_outcome = (alu_cmp == 2'b00);
+        end 
+        else if (ctrlBranchBlt) begin
+            branch_outcome = (alu_cmp == 2'b01);
+        end
+        else if (branch_jalx) begin
+            branch_outcome = 1'b1;
+        end
+        else branch_outcome = 1'b0; // Otherwise, the branch is not taken
+    end
+
+    // Mux for the branch outcome
+    Mux2x1 mux_pc_next( .sel(branch_outcome), .a(pc_plus_4), .b(branch_target), .y(pc_next) );
+
+    // Mux for selecting the calculated value
+    wire [31:0] calc_res; // The selcted calculated result which
+    Mux2x1 mux_calc_res( .sel(branch_jalx), .a(alu_out), .b(pc_plus_4), .y(calc_res) );
+
+    assign address_to_mem = alu_out;
+    assign data_to_mem = rs2;
+
+    // Mux for selecting the data to writeback
+    Mux2x1 mux_res( .sel(ctrlMemToReg), .a(calc_res), .b(data_from_mem), .y(res) );
+
+endmodule
+
 //... add new Verilog modules here ...
+
+// Clock Triggered D Flip-Flop
+module DFF( input  clk, reset,
+            input  [31:0] d,
+            output reg [31:0] q
+          );
+    always @(posedge clk) begin
+        if (reset) q <= 32'd0;
+        else q <= d;
+    end
+endmodule
 
 // Mux 2x1
 module Mux2x1( input  sel,
@@ -36,9 +147,9 @@ module ALU( input  [31:0] a,
             output reg [31:0] y,
             output reg [1:0]  cmp   // 00: a=b, 01: a<b, 10: a>b
           );
-    always (*) begin
+    always @(*) begin
         // Initialize y and cmp
-        y = 32'bx;
+        y = 32'd0;
         cmp = 2'bxx;
         case (alu_ctrl)
 
@@ -73,7 +184,8 @@ module GPRSet( input  [4:0] a1, a2, a3,
     reg [31:0] gpr_arr[31:0];
     // Initialize GPRs
     initial begin
-        for (int i=0; i<32; i=i+1) begin
+        integer i;
+        for (i=0; i<32; i=i+1) begin
             gpr_arr[i] = 32'h00000000;
         end
     end
@@ -90,21 +202,23 @@ endmodule
 // Immediate Decoder
 module ImmDecoder( input  [24:0] instr,
                    input  [2:0]  imm_ctrl,
-                   output [31:0] imm_out
+                   output reg [31:0] imm_out
                  );
-    case (imm_ctrl) 
-        // I-type
-        3'b000: imm_out = { {21{instr[24]}}, instr[23:13] };
-        // S-type
-        3'b001: imm_out = { {21{instr[24]}}, instr[23:18], instr[4:0] };
-        // B-type
-        3'b010: imm_out = { {20{instr[24]}}, instr[0], instr[23:18], instr[4:1], 1'b0 };
-        // U-type
-        3'b011: imm_out = { instr[24:5], 12'b0 };
-        // J-type
-        3'b100: imm_out = { {12{instr[24]}}, instr[12:5], instr[13], instr[23:14], 1'b0 };
-        default: imm_out = 32'bx;
-    endcase
+    always @(*) begin
+        case (imm_ctrl) 
+            // I-type
+            3'b000: imm_out <= { {21{instr[24]}}, instr[23:13] };
+            // S-type
+            3'b001: imm_out <= { {21{instr[24]}}, instr[23:18], instr[4:0] };
+            // B-type
+            3'b010: imm_out <= { {20{instr[24]}}, instr[0], instr[23:18], instr[4:1], 1'b0 };
+            // U-type
+            3'b011: imm_out <= { instr[24:5], 12'b0 };
+            // J-type
+            3'b100: imm_out <= { {12{instr[24]}}, instr[12:5], instr[13], instr[23:14], 1'b0 };
+            default: imm_out <= 32'bx;
+        endcase
+    end
 endmodule
 
 
