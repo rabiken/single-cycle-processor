@@ -89,8 +89,12 @@ module ControlUnit (
                 ctrlRegWrite = 1'b1;
                 ctrlALUSrc = 1'b0;
                 case (funct3)
-                    3'b000: ctrlALUCtrl = 3'b000; // Add
-                    3'b010: ctrlALUCtrl = 3'b001; // Sub
+                    3'b000: begin
+                        case (funct7)
+                            7'b0000000: ctrlALUCtrl = 3'b000; // Add
+                            7'b0100000: ctrlALUCtrl = 3'b001; // Sub
+                        endcase
+                    end
                     3'b101: ctrlALUCtrl = 3'b010; // Srl
                     3'b111: ctrlALUCtrl = 3'b011; // And
                     default: ctrlALUCtrl = 3'bxxx;
@@ -322,23 +326,23 @@ module ALU( input  [31:0] a,
             output reg [31:0] y,
             output reg [1:0]  cmp   // 00: a=b, 01: a<b, 10: a>b
           );
-    always @(a, b, alu_ctrl) begin
+    always @(*) begin
         // Initialize y and cmp
         y = 32'd0;
         cmp = 2'bxx;
         case (alu_ctrl)
 
             // Add - Addition
-            3'b000: y = a + b;
+            3'b000: y = $signed(a) + $signed(b);
             // Sub - Subtract
             3'b001: begin
-                y = a - b;
+                y = $signed(a) - $signed(b);
                 if (a==b) cmp = 2'b00;
-                else if (a<b) cmp = 2'b01;
+                else if ($signed(a)<$signed(b)) cmp = 2'b01;
                 else cmp = 2'b10;
             end
             // Srl - Shift Right Logical
-            3'b010: y = a >> b;
+            3'b010: y = $unsigned(a) >> $signed(b);
             // And - Bitwise AND
             3'b011: y = a & b;
             // Fll - Floor Log2
