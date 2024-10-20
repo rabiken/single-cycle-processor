@@ -15,7 +15,7 @@ module processor( input         clk, reset,
     wire ctrlRegWrite, ctrlALUSrc, 
         ctrlBranchJal, ctrlBranchJalr, 
         ctrlBranchBeq, ctrlBranchBlt, 
-        ctrlMemToReg;
+        ctrlMemToReg, ctrlLui;
     ControlUnit control_unit_inst( 
         .opcode(opcode),
         .funct3(funct3),
@@ -29,7 +29,8 @@ module processor( input         clk, reset,
         .ctrlBranchBeq(ctrlBranchBeq),
         .ctrlBranchBlt(ctrlBranchBlt), 
         .ctrlMemToReg(ctrlMemToReg),
-        .ctrlMemWrite(WE) 
+        .ctrlMemWrite(WE),
+        .ctrlLui(ctrlLui)
     );
     DataPath data_path_inst( .clk(clk),
         .reset(reset),
@@ -46,7 +47,8 @@ module processor( input         clk, reset,
         .ctrlBranchJalr(ctrlBranchJalr), 
         .ctrlBranchBeq(ctrlBranchBeq),
         .ctrlBranchBlt(ctrlBranchBlt), 
-        .ctrlMemToReg(ctrlMemToReg) 
+        .ctrlMemToReg(ctrlMemToReg),
+        .ctrlLui(ctrlLui)
     );
 endmodule
 
@@ -64,7 +66,8 @@ module ControlUnit (
     output reg ctrlBranchBeq,
     output reg ctrlBranchBlt,
     output reg ctrlMemToReg,
-    output reg ctrlMemWrite
+    output reg ctrlMemWrite,
+    output reg ctrlLui
 );
     always @(*) begin
         // Initialize all control signals
@@ -78,6 +81,7 @@ module ControlUnit (
         ctrlBranchBlt = 1'b0;
         ctrlMemToReg = 1'b0;
         ctrlMemWrite = 1'b0;
+        ctrlLui = 1'b0;
         case (opcode)
             // R-type
             7'b0110011: begin
@@ -97,6 +101,7 @@ module ControlUnit (
                 ctrlRegWrite = 1'b1;
                 ctrlImmCtrl = 3'b000; // I-type
                 ctrlALUSrc = 1'b1;
+                ctrlALUCtrl = 3'b000; // Add
                 ctrlMemToReg = 1'b1;
             end 
             // addi
@@ -120,6 +125,7 @@ module ControlUnit (
             7'b0100011: begin
                 ctrlImmCtrl = 3'b001; // S-type
                 ctrlALUSrc = 1'b1;
+                ctrlALUCtrl = 3'b000; // Add
                 ctrlMemWrite = 1'b1;
             end
 
@@ -144,6 +150,13 @@ module ControlUnit (
             end
 
             // Others
+            // U-type
+            // lui
+            7'b0110111: begin
+                ctrlRegWrite = 1'b1;
+                ctrlImmCtrl = 3'b011; // U-type
+                ctrlLui = 1'b1;
+            end
             // floor_log
             7'b0001011: begin
                 ctrlRegWrite = 1'b1;
@@ -171,7 +184,8 @@ module DataPath ( input        clk, reset,
                   input ctrlBranchJalr,
                   input ctrlBranchBeq,
                   input ctrlBranchBlt,
-                  input ctrlMemToReg
+                  input ctrlMemToReg,
+                  input ctrlLui
                 );
     // Program Counter Register
     wire [31:0] pc_next;
@@ -240,19 +254,37 @@ module DataPath ( input        clk, reset,
     // Mux for the branch outcome
     Mux2x1 mux_pc_next( .sel(branch_outcome), .a(pc_plus_4), .b(branch_target), .y(pc_next) );
 
-    // Mux for selecting the calculated value
-    wire [31:0] calc_res; // The selcted calculated result which
-    Mux2x1 mux_calc_res( .sel(branch_jalx), .a(alu_out), .b(pc_plus_4), .y(calc_res) );
+    // Data selector for the writeback
+    WriteBackSelecter writeback_selecter_inst( 
+        .ctrlMemToReg(ctrlMemToReg), .branch_jalx(branch_jalx), 
+        .ctrlLui(ctrlLui), .data_from_mem(data_from_mem), 
+        .pc_plus_4(pc_plus_4), .alu_out(alu_out), 
+        .imm_op(imm_op), .res(res) );
 
     assign address_to_mem = alu_out;
     assign data_to_mem = rs2;
 
-    // Mux for selecting the data to writeback
-    Mux2x1 mux_res( .sel(ctrlMemToReg), .a(calc_res), .b(data_from_mem), .y(res) );
 
 endmodule
 
 //... add new Verilog modules here ...
+
+// Write Back Selecter 
+module WriteBackSelecter( 
+    input ctrlMemToReg,
+    input branch_jalx,
+    input ctrlLui, 
+    input [31:0] data_from_mem,
+    input [31:0] pc_plus_4,
+    input [31:0] alu_out,
+    input [31:0] imm_op,
+    output [31:0] res
+);
+    wire [31:0] w1, w2;
+    Mux2x1 mux_inst1( .sel(branch_jalx), .a(alu_out), .b(pc_plus_4), .y(w1) );
+    Mux2x1 mux_inst2( .sel(ctrlLui), .a(w1), .b(imm_op), .y(w2) );
+    Mux2x1 mux_inst3( .sel(ctrlMemToReg), .a(w2), .b(data_from_mem), .y(res) );
+endmodule
 
 // Clock Triggered D Flip-Flop
 module DFF( input  clk, reset,
@@ -289,7 +321,7 @@ module ALU( input  [31:0] a,
             output reg [31:0] y,
             output reg [1:0]  cmp   // 00: a=b, 01: a<b, 10: a>b
           );
-    always @(*) begin
+    always @(a, b, alu_ctrl) begin
         // Initialize y and cmp
         y = 32'd0;
         cmp = 2'bxx;
@@ -328,16 +360,16 @@ module GPRSet( input  [4:0] a1, a2, a3,
     integer i;
     initial begin
         for (i=0; i<32; i=i+1) begin
-            gpr_arr[i] = 32'h00000000;
+            gpr_arr[i] <= 32'h00000000;
         end
     end
     always @(posedge clk) begin
-        gpr_arr[0] = 32'h00000000; // x0 is always zero.
+        gpr_arr[0] <= 32'h0; // x0 is always zero.
         if (we) begin
-            gpr_arr[a3] = wd3;
+            gpr_arr[a3] <= wd3;
         end
-        rd1 = gpr_arr[a1];
-        rd2 = gpr_arr[a2];
+        rd1 <= gpr_arr[a1];
+        rd2 <= gpr_arr[a2];
     end
 endmodule 
 
