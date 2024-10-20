@@ -348,6 +348,7 @@ module ALU( input  [31:0] a,
             // Fll - Floor Log2
             3'b100: begin
                 // TODO: Implement Fll
+                y = $signed(a[30:23]) - 127;
             end
             default: y = 32'bx;
         endcase
