@@ -1,0 +1,1 @@
+The test for lw and sw instructions

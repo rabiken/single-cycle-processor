@@ -82,6 +82,7 @@ module ControlUnit (
         ctrlMemToReg = 1'b0;
         ctrlMemWrite = 1'b0;
         ctrlLui = 1'b0;
+        $display("opcode: %h", opcode);
         case (opcode)
             // R-type
             7'b0110011: begin
@@ -110,7 +111,6 @@ module ControlUnit (
                 ctrlImmCtrl = 3'b000; // I-type
                 ctrlALUSrc = 1'b1;
                 ctrlALUCtrl = 3'b000; // Add
-                ctrlMemToReg = 1'b1;
             end
             // jalr
             7'b1100111: begin
@@ -141,15 +141,6 @@ module ControlUnit (
                 endcase
             end
 
-            // J-type
-            // jal
-            7'b1101111: begin
-                ctrlRegWrite = 1'b1;
-                ctrlImmCtrl = 3'b011; // J-type
-                ctrlBranchJal = 1'b1;
-            end
-
-            // Others
             // U-type
             // lui
             7'b0110111: begin
@@ -157,6 +148,16 @@ module ControlUnit (
                 ctrlImmCtrl = 3'b011; // U-type
                 ctrlLui = 1'b1;
             end
+
+            // J-type
+            // jal
+            7'b1101111: begin
+                ctrlRegWrite = 1'b1;
+                ctrlImmCtrl = 3'b100; // J-type
+                ctrlBranchJal = 1'b1;
+            end
+
+            // Others
             // floor_log
             7'b0001011: begin
                 ctrlRegWrite = 1'b1;
@@ -353,24 +354,24 @@ endmodule
 module GPRSet( input  [4:0] a1, a2, a3,
                input  [31:0] wd3,
                input  clk, we,
-               output reg [31:0] rd1, rd2
+               output [31:0] rd1, rd2
              );
     reg [31:0] gpr_arr[31:0];
     // Initialize GPRs
     integer i;
     initial begin
         for (i=0; i<32; i=i+1) begin
-            gpr_arr[i] <= 32'h00000000;
+            gpr_arr[i] = 32'h00000000;
         end
     end
     always @(posedge clk) begin
-        gpr_arr[0] <= 32'h0; // x0 is always zero.
         if (we) begin
-            gpr_arr[a3] <= wd3;
+            gpr_arr[a3] = wd3;
+            gpr_arr[0] = 32'h00000000; // x0 is always zero
         end
-        rd1 <= gpr_arr[a1];
-        rd2 <= gpr_arr[a2];
     end
+    assign rd1 = gpr_arr[a1];
+    assign rd2 = gpr_arr[a2];
 endmodule 
 
 // Immediate Decoder
@@ -381,16 +382,16 @@ module ImmDecoder( input  [24:0] instr,
     always @(*) begin
         case (imm_ctrl) 
             // I-type
-            3'b000: imm_out <= { {21{instr[24]}}, instr[23:13] };
+            3'b000: imm_out = { {21{instr[24]}}, instr[23:13] };
             // S-type
-            3'b001: imm_out <= { {21{instr[24]}}, instr[23:18], instr[4:0] };
+            3'b001: imm_out = { {21{instr[24]}}, instr[23:18], instr[4:0] };
             // B-type
-            3'b010: imm_out <= { {20{instr[24]}}, instr[0], instr[23:18], instr[4:1], 1'b0 };
+            3'b010: imm_out = { {20{instr[24]}}, instr[0], instr[23:18], instr[4:1], 1'b0 };
             // U-type
-            3'b011: imm_out <= { instr[24:5], 12'b0 };
+            3'b011: imm_out = { instr[24:5], 12'b0 };
             // J-type
-            3'b100: imm_out <= { {12{instr[24]}}, instr[12:5], instr[13], instr[23:14], 1'b0 };
-            default: imm_out <= 32'dx;
+            3'b100: imm_out = { {12{instr[24]}}, instr[12:5], instr[13], instr[23:14], 1'b0 };
+            default: imm_out = 32'dx;
         endcase
     end
 endmodule
