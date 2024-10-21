@@ -82,7 +82,6 @@ module ControlUnit (
         ctrlMemToReg = 1'b0;
         ctrlMemWrite = 1'b0;
         ctrlLui = 1'b0;
-        $display("opcode: %h", opcode);
         case (opcode)
             // R-type
             7'b0110011: begin
@@ -348,9 +347,9 @@ module ALU( input  [31:0] a,
             // Fll - Floor Log2
             3'b100: begin
                 // TODO: Implement Fll
-                y = $signed(a[30:23]) - 127;
+                y = $unsigned(a[30:23]) - 127;
             end
-            default: y = 32'bx;
+            default: y = 32'h0000000;
         endcase
     end
 endmodule

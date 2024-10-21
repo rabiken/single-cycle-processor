@@ -11,19 +11,19 @@ init:
 
 # Calculate floor_log(float x), where x is a2
 # a2 = (int) floor_log(float a2);
-calc:
+floor_log:
   addi t1, x0, 23	# t1 = 23;
   srl a2, a2, t1	# a2 = a2 >> 23;
   addi t1, x0, 127	# t1 = 127;
   sub a2, a2, t1	# a2 = a2 - 127;
-  j calc_ret		# return
+  j floor_log_ret		# return
 
 do_task:
   addi t0, x0, 0x0	# Iterator i
   loop1:
     lw a2, 0x0(a1)      # a2 <- the element a1 is pointing to
-    j calc		# calculate the value to replace
-    calc_ret:
+    j floor_log		# calculate the value to replace
+    floor_log_ret:
     sw a2, 0x0(a1)	# Write back the calculated value
     addi a1, a1, 0x4	# Point the next element.
     addi t0, t0, 0x1	# i = i + 1
